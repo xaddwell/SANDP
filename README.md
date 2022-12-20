@@ -15,7 +15,7 @@ such as **conference, title, abstract**，which can be written in the form of [m
 ||Date|Speaker|Title|Sharer|
 |---|:---:|:---:|:---:|:---:| 
 |1|2022.12.16|甘雨由||林瑞潇|
-|2|2022.12.23|麻瓯勃||陈佳豪|
+|2|2022.12.23|麻瓯勃|Towards Understanding and Boosting Adversarial Transferability from a Distribution Perspective|陈佳豪|
 |3|2022.12.30|何平||丁卓远|
 |4|2023.01.06|白熠阳||柴欣怡|
 |5|2023.01.13||||
