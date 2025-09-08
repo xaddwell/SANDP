@@ -3,54 +3,84 @@
 name: Monitor Group Meeting Schedule
 
 on:
-  push:
-    branches:
-      - master # 监控 main 分支的更新，如果仓库使用 master，请修改为 master
+  schedule:
+    # 设置定时任务：这里设置为每隔6小时运行一次。
+    # cron 语法: '分钟 小时 天 月 星期' (UTC时间)
+    # '0 */6 * * *' 表示每隔6小时的0分执行一次。你可以根据需要调整频率。
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # 允许你手动在 GitHub 仓库的 Actions 页面点击按钮来运行此工作流，方便测试。
 
 jobs:
   check-for-name-addition:
     runs-on: ubuntu-latest
     steps:
-      # 步骤1：检出仓库代码，fetch-depth: 2 保证能获取到上一个提交进行对比
+      # 步骤1：检出你自己的私有仓库代码
+      # fetch-depth: 0 表示获取所有历史记录，以便能和上游仓库正确比较
       - name: Checkout repository content
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: 'master' # 确保检出的是你私有仓库的 master 分支
+          fetch-depth: 0
 
-      # 步骤2：检查特定名字是否在最近一次提交中被添加
-      # - 替换 'schedule.md' 为实际包含日程安排的文件名。
-      # - 替换 'SpecificNameToCheck' 为你要监控的具体名字。
+      # 步骤2：关联上游公共仓库并拉取最新更改
+      - name: Sync changes from upstream repository (ZJUNESA/SANDP)
+        id: sync
+        run: |
+          # 设置上游仓库地址
+          git remote add upstream https://github.com/ZJUNESA/SANDP.git
+          
+          # 记录拉取前的 commit hash
+          echo "OLD_HEAD=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+          # 尝试拉取上游仓库的 master 分支更新
+          if git fetch upstream master; then
+            # 将本地分支重置到上游分支的最新状态
+            # 注意：这会丢弃你在自己私有仓库 master 分支上可能存在的本地修改，但对于纯监控任务来说这是最简洁的做法。
+            git reset --hard upstream/master
+            echo "New changes fetched from upstream."
+          else
+            echo "Failed to fetch upstream changes or no changes."
+          fi
+          
+          # 记录拉取后的 commit hash
+          echo "NEW_HEAD=$(git rev-parse HEAD)" >> $GITHUB_ENV
+
+      # 步骤3：比较更新内容，检查特定名字是否被添加
       - name: Check for specific name addition in diff
         id: check_diff
+        # 仅当拉取前后 commit hash 不同时（即有更新时）才运行检查
+        if: env.OLD_HEAD != env.NEW_HEAD
         run: |
-          # 使用 git diff 比较本次提交和上一次提交中 schedule.md 文件的差异
+          echo "Comparing changes between old commit (${{ env.OLD_HEAD }}) and new commit (${{ env.NEW_HEAD }})..."
+          # 使用 git diff 比较拉取前后的差异，检查 README.md 文件中新增的行
           # grep "^\+" 筛选出新增的行
-          # grep -q "SpecificNameToCheck" 检查新增行中是否包含目标名字
-          if git diff HEAD~1 HEAD -- "README.md" | grep "^\+" | grep -q "陈佳豪"; then
-            echo "Name found in additions."
+          # grep -q "陈佳豪" 检查新增行中是否包含目标名字
+          if git diff ${{ env.OLD_HEAD }} ${{ env.NEW_HEAD }} -- "README.md" | grep "^\+" | grep -q "陈佳豪"; then
+            echo "Name '陈佳豪' found in additions."
             echo "::set-output name=name_added::true"
           else
-            echo "Target name not found in new additions."
+            echo "Target name not found in new additions for this update cycle."
             echo "::set-output name=name_added::false"
           fi
 
-      # 步骤3：如果检测到名字被添加，则发送邮件
+      # 步骤4：如果检测到名字被添加，则发送邮件
       - name: Send notification email if name added
         if: steps.check_diff.outputs.name_added == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: smtp.gmail.com # 使用你的邮箱SMTP服务器地址
+          server_address: smtp.zju.edu.cn	
           server_port: 994
-          username: ${{ secrets.EMAIL_USERNAME }} # 邮箱账号，存储在 GitHub Secrets 中
-          password: ${{ secrets.EMAIL_PASSWORD }} # 邮箱密码或应用专用密码，存储在 GitHub Secrets 中
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
           subject: '组会提醒：轮到你准备了'
           body: |
             你好，
 
-            检测到组会安排更新，你的名字已被添加到日程中。
+            检测到 ZJUNESA/SANDP 组会安排更新，你的名字 "陈佳豪" 已被添加到日程中。
             请提前至少一周开始准备组会内容。
 
             仓库链接：https://github.com/ZJUNESA/SANDP
 
-          to: recipient-email@example.com # 接收提醒的邮箱地址
-          from: Your Name <${{ secrets.EMAIL_USERNAME }}>
+          to: xaddwell@qq.com # [重要] 替换为你自己的接收邮箱地址
+          from: GitHub Monitor <${{ secrets.EMAIL_USERNAME }}> # 你可以修改 "GitHub Monitor" 为你喜欢的发件人昵称
