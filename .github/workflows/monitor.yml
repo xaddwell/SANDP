@@ -1,0 +1,56 @@
+# .github/workflows/monitor.yml
+
+name: Monitor Group Meeting Schedule
+
+on:
+  push:
+    branches:
+      - master # 监控 main 分支的更新，如果仓库使用 master，请修改为 master
+
+jobs:
+  check-for-name-addition:
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤1：检出仓库代码，fetch-depth: 2 保证能获取到上一个提交进行对比
+      - name: Checkout repository content
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # 步骤2：检查特定名字是否在最近一次提交中被添加
+      # - 替换 'schedule.md' 为实际包含日程安排的文件名。
+      # - 替换 'SpecificNameToCheck' 为你要监控的具体名字。
+      - name: Check for specific name addition in diff
+        id: check_diff
+        run: |
+          # 使用 git diff 比较本次提交和上一次提交中 schedule.md 文件的差异
+          # grep "^\+" 筛选出新增的行
+          # grep -q "SpecificNameToCheck" 检查新增行中是否包含目标名字
+          if git diff HEAD~1 HEAD -- "README.md" | grep "^\+" | grep -q "陈佳豪"; then
+            echo "Name found in additions."
+            echo "::set-output name=name_added::true"
+          else
+            echo "Target name not found in new additions."
+            echo "::set-output name=name_added::false"
+          fi
+
+      # 步骤3：如果检测到名字被添加，则发送邮件
+      - name: Send notification email if name added
+        if: steps.check_diff.outputs.name_added == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com # 使用你的邮箱SMTP服务器地址
+          server_port: 994
+          username: ${{ secrets.EMAIL_USERNAME }} # 邮箱账号，存储在 GitHub Secrets 中
+          password: ${{ secrets.EMAIL_PASSWORD }} # 邮箱密码或应用专用密码，存储在 GitHub Secrets 中
+          subject: '组会提醒：轮到你准备了'
+          body: |
+            你好，
+
+            检测到组会安排更新，你的名字已被添加到日程中。
+            请提前至少一周开始准备组会内容。
+
+            仓库链接：https://github.com/ZJUNESA/SANDP
+
+          to: recipient-email@example.com # 接收提醒的邮箱地址
+          from: Your Name <${{ secrets.EMAIL_USERNAME }}>
